@@ -707,7 +707,7 @@
     scene.add(frameGroup);
   }
 
-  function buildPins(){
+  function buildPins(keepView){
     if(!depthData) return;
     clearBoardKeepData();
 
@@ -806,8 +806,10 @@
     if(typeof clearHistory==='function') clearHistory();   // new grid → reset undo
 
     buildFrame(boardW, boardH);
-    dist=Math.max(boardW,boardH)*1.6;
-    target.set(0,0,0);
+    if(!keepView){                       // only frame the camera on first build / new image
+      dist=Math.max(boardW,boardH)*1.6;
+      target.set(0,0,0);
+    }
     applyCam();
   }
 
@@ -827,7 +829,7 @@
   // ---------- image -> depth field ----------
   const off=document.createElement('canvas'); const octx=off.getContext('2d',{willReadFrequently:true});
 
-  function processImage(img){
+  function processImage(img, keepView){
     dismissTip();
     const res=+document.getElementById('res').value;
     const ar=img.width/img.height;
@@ -846,7 +848,7 @@
       arr[i]=Math.max(0,Math.min(1,d));
     }
     depthData=arr; gridCols=cols; gridRows=rows;
-    buildPins();
+    buildPins(keepView);
   }
 
   let lastImg=null;
@@ -864,12 +866,12 @@
   }
 
   // blank flat board — all pins at rest, ready to sculpt with no image
-  function buildBlankBoard(){
+  function buildBlankBoard(keepView){
     const res=+document.getElementById('res').value;
     const cols=res, rows=Math.round(res*1.15);      // gentle portrait default
     depthData=new Float32Array(cols*rows);          // all zero = flat
     gridCols=cols; gridRows=rows;
-    buildPins();
+    buildPins(keepView);
   }
 
   // ---------- wiring ----------
@@ -881,11 +883,13 @@
     if(t && t.parentNode) t.parentNode.removeChild(t);
   }
   document.getElementById('file').onchange=e=>{if(e.target.files[0]) loadFile(e.target.files[0]); e.target.value='';};
-  function reprocess(){if(lastImg){processImage(lastImg);} else {buildBlankBoard();}}
+  function reprocess(){if(lastImg){processImage(lastImg, true);} else {buildBlankBoard(true);}}
+  // image-only tweaks: re-imprint the image (keeping camera). No-op on a hand-sculpt (nothing to re-imprint).
+  function reprocessImageOnly(){ if(lastImg) processImage(lastImg, true); }
   document.getElementById('res').addEventListener('input',e=>{document.getElementById('resv').textContent=e.target.value; reprocess();});
-  document.getElementById('dep').addEventListener('input',e=>{document.getElementById('depv').textContent=(+e.target.value).toFixed(1); reprocess();});
-  document.getElementById('con').addEventListener('input',e=>{document.getElementById('conv').textContent=(+e.target.value).toFixed(1); reprocess();});
-  document.getElementById('invert').addEventListener('change',reprocess);
+  document.getElementById('dep').addEventListener('input',e=>{document.getElementById('depv').textContent=(+e.target.value).toFixed(1); reprocessImageOnly();});
+  document.getElementById('con').addEventListener('input',e=>{document.getElementById('conv').textContent=(+e.target.value).toFixed(1); reprocessImageOnly();});
+  document.getElementById('invert').addEventListener('change',reprocessImageOnly);
 
   // light controls — rotate key light azimuth around the board + set its power (no pin rebuild)
   function updateKeyLight(){
@@ -1288,6 +1292,7 @@
     if(window.__renderBrush) window.__renderBrush(DEFAULTS.brush);
     document.getElementById('invert').checked=false;
     document.getElementById('sculpt').checked=false;
+    if(typeof closePops==='function') closePops();   // close any open panel + clear sculpt-active state
     activeRamp='ice';
     [...rampWrap.children].forEach(x=>x.classList.toggle('on',x.dataset.r==='ice'));
     updateLegend();
