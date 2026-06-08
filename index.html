@@ -281,6 +281,24 @@
   .empty p{font-size:13px;color:var(--muted);margin:0;max-width:300px;line-height:1.6;}
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
+
+  <!-- GoatCounter analytics + timezone capture -->
+<script>
+  window.goatcounter = {
+    path: function (p) {
+      try {
+        var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        var hour = new Date().getHours();
+        return p + '?tz=' + encodeURIComponent(tz) + '&localhour=' + hour;
+      } catch (e) {
+        return p;
+      }
+    }
+  };
+</script>
+<script data-goatcounter="https://apmx30.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"> 
+</script>
 </head>
 <body>
 <div class="loading" id="loading"><div class="pinwave"><i style="animation-delay:0s"></i><i style="animation-delay:.08s"></i><i style="animation-delay:.16s"></i><i style="animation-delay:.24s"></i><i style="animation-delay:.32s"></i><i style="animation-delay:.4s"></i><i style="animation-delay:.48s"></i><i style="animation-delay:.56s"></i><i style="animation-delay:.64s"></i></div>preparing studio</div>
