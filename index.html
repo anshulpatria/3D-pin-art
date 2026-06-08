@@ -932,12 +932,33 @@
   });
   mpWrap.firstChild.classList.add('on');
   document.getElementById('save').onclick=()=>{
+    const w=app.clientWidth, h=app.clientHeight;
+    const prevPR=renderer.getPixelRatio();
+    // target ~3000px on the long edge for a crisp, high-res export
+    const target=3000;
+    const scale=Math.max(1, target/Math.max(w,h));
+    const ew=Math.round(w*scale), eh=Math.round(h*scale);
+
+    // upscale render targets
+    renderer.setPixelRatio(1);
+    renderer.setSize(ew, eh, false);
+    if(composer){ composer.setPixelRatio(1); composer.setSize(ew, eh); }
+    camera.aspect=ew/eh; camera.updateProjectionMatrix();
+
     if(bloomReady && bloomPass && bloomPass.strength>0.001) composer.render(); else renderer.render(scene,camera);
+
     const cv=renderer.domElement;
     const trigger=(url, revoke)=>{ const a=document.createElement('a'); a.download='pin-art-3d.png'; a.href=url;
       document.body.appendChild(a); a.click(); a.remove(); if(revoke) setTimeout(()=>URL.revokeObjectURL(url),1000); };
-    if(cv.toBlob){ cv.toBlob(b=>{ if(b) trigger(URL.createObjectURL(b), true); else trigger(cv.toDataURL('image/png')); }, 'image/png'); }
-    else { trigger(cv.toDataURL('image/png')); }
+    const restore=()=>{
+      renderer.setPixelRatio(prevPR);
+      renderer.setSize(w, h, false);
+      if(composer){ composer.setPixelRatio(prevPR); composer.setSize(w, h); }
+      camera.aspect=w/h; camera.updateProjectionMatrix();
+      if(bloomReady && bloomPass && bloomPass.strength>0.001) composer.render(); else renderer.render(scene,camera);
+    };
+    if(cv.toBlob){ cv.toBlob(b=>{ if(b) trigger(URL.createObjectURL(b), true); else trigger(cv.toDataURL('image/png')); restore(); }, 'image/png'); }
+    else { trigger(cv.toDataURL('image/png')); restore(); }
   };
   document.getElementById('undo').onclick=undo;
   document.getElementById('redo').onclick=redo;
