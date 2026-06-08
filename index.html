@@ -117,8 +117,22 @@
   .save-opt{text-align:left;padding:9px 11px;border:none;background:transparent;border-radius:8px;color:var(--txt);
     cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;transition:background .15s;}
   .save-opt:hover{background:rgba(255,255,255,0.08);}
+  .save-sub{display:block;font-size:10px;color:var(--muted);font-weight:500;margin-top:1px;}
+  .save-tip{font-size:10.5px;color:var(--muted);line-height:1.45;padding:8px 9px 4px;margin-top:4px;border-top:1px solid var(--line-2);}
+  .save-tip b{color:var(--txt);}
   @media (max-width:560px){.toolbar{top:auto;bottom:64px;right:50%;transform:translateX(50%);}
     .save-menu{right:auto;left:50%;transform:translateX(-50%);}}
+
+  /* clean-screen mode: hide all UI chrome for a perfect screenshot */
+  body.ui-hidden .toolbar, body.ui-hidden .rail, body.ui-hidden .rail-l,
+  body.ui-hidden .brandbar, body.ui-hidden .views, body.ui-hidden .hint,
+  body.ui-hidden .sculpt-dock, body.ui-hidden .pop{ display:none !important; }
+  .screenshot-hint{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:40;
+    background:rgba(10,11,15,0.82);backdrop-filter:blur(10px);border:1px solid var(--line);
+    color:var(--txt);font-size:12px;font-weight:500;letter-spacing:0.02em;padding:9px 16px;border-radius:22px;
+    opacity:0;visibility:hidden;transition:opacity .25s;pointer-events:none;}
+  .screenshot-hint.show{opacity:1;visibility:visible;}
+  body.ui-hidden .screenshot-hint{display:block;}
 
   /* right-side rail */
   .rail{position:fixed;top:50%;right:16px;transform:translateY(-50%);z-index:11;
@@ -386,15 +400,18 @@
   <button class="tbtn" id="reset" title="Reset" aria-label="Reset">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
   </button>
+  <button class="tbtn" id="cleanscreen" title="Hide UI for screenshot (F)" aria-label="Hide UI">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+  </button>
   <div class="save-wrap">
     <button class="tbtn primary" id="save" title="Download PNG" aria-label="Download PNG">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
     </button>
     <div class="save-menu" id="save-menu" hidden>
       <div class="save-menu-h">Download PNG</div>
-      <button class="save-opt" data-mult="2">2× resolution</button>
-      <button class="save-opt" data-mult="4">4× resolution</button>
-      <button class="save-opt" data-mult="6">6× resolution</button>
+      <button class="save-opt" data-mult="1">Standard <span class="save-sub">screen size</span></button>
+      <button class="save-opt" data-mult="2">HD <span class="save-sub">2× — sharper</span></button>
+      <div class="save-tip">For max quality with no lag, press <b>F</b> to hide the UI and screenshot.</div>
     </div>
   </div>
 </div>
@@ -406,7 +423,8 @@
   <button class="vbtn" data-view="flat" title="Flat / top-down">Flat</button>
   <button class="vbtn" data-view="side" title="Side view">Side</button>
 </div>
-<div class="hint"><span><b>Drag</b> orbit</span><span><b>Scroll</b> zoom</span><span><b>Right-drag</b> pan</span></div>
+<div class="hint"><span><b>Drag</b> orbit</span><span><b>Scroll</b> zoom</span><span><b>Right-drag</b> pan</span><span><b>F</b> hide UI</span></div>
+<div class="screenshot-hint" id="shot-hint">Clean view — press <b>F</b> or <b>Esc</b> to show controls</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
@@ -883,11 +901,59 @@
     if(t && t.parentNode) t.parentNode.removeChild(t);
   }
   document.getElementById('file').onchange=e=>{if(e.target.files[0]) loadFile(e.target.files[0]); e.target.value='';};
+  // push-depth: rescale existing pins live (no rebuild) so sculpts/images are preserved
+  function onDepthChange(){
+    if(lastImg){ processImage(lastImg, true); return; }   // image path re-imprints (keeps camera)
+    if(!boardState || !pinMesh) return;
+    const {cols,rows,depthAttr,baseLen,maxPush,PIN_LEN,gap}=boardState;
+    const depthScale=+document.getElementById('dep').value;
+    boardState.depthScale=depthScale;
+    for(let r=0;r<rows;r++){
+      for(let c=0;c<cols;c++){
+        const i=r*cols+c, d=depthAttr[i];
+        const pushZ=baseLen + d*maxPush*depthScale;
+        dummy.position.set((c-cols/2+0.5)*gap, (rows/2-r-0.5)*gap, pushZ - PIN_LEN*0.5 + 5);
+        dummy.scale.set(1,1,1); dummy.updateMatrix();
+        pinMesh.setMatrixAt(i, dummy.matrix);
+      }
+    }
+    pinMesh.instanceMatrix.needsUpdate=true;
+  }
+
   function reprocess(){if(lastImg){processImage(lastImg, true);} else {buildBlankBoard(true);}}
   // image-only tweaks: re-imprint the image (keeping camera). No-op on a hand-sculpt (nothing to re-imprint).
   function reprocessImageOnly(){ if(lastImg) processImage(lastImg, true); }
-  document.getElementById('res').addEventListener('input',e=>{document.getElementById('resv').textContent=e.target.value; reprocess();});
-  document.getElementById('dep').addEventListener('input',e=>{document.getElementById('depv').textContent=(+e.target.value).toFixed(1); reprocessImageOnly();});
+
+  // bilinear resample a depth grid from (oc x or) to (nc x nr)
+  function resampleDepth(src, oc, or_, nc, nr){
+    const out=new Float32Array(nc*nr);
+    for(let r=0;r<nr;r++){
+      const sy=(nr<=1)?0:(r/(nr-1))*(or_-1);
+      const y0=Math.floor(sy), y1=Math.min(or_-1,y0+1), fy=sy-y0;
+      for(let c=0;c<nc;c++){
+        const sx=(nc<=1)?0:(c/(nc-1))*(oc-1);
+        const x0=Math.floor(sx), x1=Math.min(oc-1,x0+1), fx=sx-x0;
+        const a=src[y0*oc+x0], b=src[y0*oc+x1], cc=src[y1*oc+x0], d=src[y1*oc+x1];
+        out[r*nc+c]=a*(1-fx)*(1-fy)+b*fx*(1-fy)+cc*(1-fx)*fy+d*fx*fy;
+      }
+    }
+    return out;
+  }
+
+  function onResolutionChange(){
+    const res=+document.getElementById('res').value;
+    if(lastImg){ processImage(lastImg, true); return; }   // image: re-imprint at new res
+    // hand-sculpt: resample the CURRENT depth into the new grid so the art is preserved
+    const cur=(boardState && boardState.depthAttr) ? boardState.depthAttr : depthData;
+    const oc=gridCols, or_=gridRows;
+    const nc=res, nr=Math.round(res*1.15);
+    depthData = (cur && oc && or_) ? resampleDepth(cur, oc, or_, nc, nr) : new Float32Array(nc*nr);
+    gridCols=nc; gridRows=nr;
+    buildPins(true);   // keep camera
+  }
+
+  document.getElementById('res').addEventListener('input',e=>{document.getElementById('resv').textContent=e.target.value; onResolutionChange();});
+  document.getElementById('dep').addEventListener('input',e=>{document.getElementById('depv').textContent=(+e.target.value).toFixed(1); onDepthChange();});
   document.getElementById('con').addEventListener('input',e=>{document.getElementById('conv').textContent=(+e.target.value).toFixed(1); reprocessImageOnly();});
   document.getElementById('invert').addEventListener('change',reprocessImageOnly);
 
@@ -959,21 +1025,10 @@
     const w=app.clientWidth, h=app.clientHeight;
     const prevPR=renderer.getPixelRatio();
     let ew=Math.round(w*mult), eh=Math.round(h*mult);
-    // don't exceed the GPU's max drawing buffer (silent failure otherwise)
-    const cap=Math.min(renderer.capabilities.maxTextureSize || 8192, 8192);
+    // keep within a safe, reliable buffer size (large enough to be crisp, small enough to not choke/lag)
+    const cap=Math.min(renderer.capabilities.maxTextureSize || 4096, 4096);
     if(Math.max(ew,eh)>cap){ const f=cap/Math.max(ew,eh); ew=Math.round(ew*f); eh=Math.round(eh*f); }
 
-    // upscale render targets
-    renderer.setPixelRatio(1);
-    renderer.setSize(ew, eh, false);
-    if(composer){ composer.setPixelRatio(1); composer.setSize(ew, eh); }
-    camera.aspect=ew/eh; camera.updateProjectionMatrix();
-
-    if(bloomReady && bloomPass && bloomPass.strength>0.001) composer.render(); else renderer.render(scene,camera);
-
-    const cv=renderer.domElement;
-    const trigger=(url, revoke)=>{ const a=document.createElement('a'); a.download='pin-art-3d@'+mult+'x.png'; a.href=url;
-      document.body.appendChild(a); a.click(); a.remove(); if(revoke) setTimeout(()=>URL.revokeObjectURL(url),1000); };
     const restore=()=>{
       renderer.setPixelRatio(prevPR);
       renderer.setSize(w, h, false);
@@ -981,8 +1036,25 @@
       camera.aspect=w/h; camera.updateProjectionMatrix();
       if(bloomReady && bloomPass && bloomPass.strength>0.001) composer.render(); else renderer.render(scene,camera);
     };
-    if(cv.toBlob){ cv.toBlob(b=>{ if(b) trigger(URL.createObjectURL(b), true); else trigger(cv.toDataURL('image/png')); restore(); }, 'image/png'); }
-    else { trigger(cv.toDataURL('image/png')); restore(); }
+    const trigger=(url, revoke)=>{ const a=document.createElement('a'); a.download='pin-art-3d.png'; a.href=url;
+      document.body.appendChild(a); a.click(); a.remove(); if(revoke) setTimeout(()=>URL.revokeObjectURL(url),1000); };
+
+    try{
+      renderer.setPixelRatio(1);
+      renderer.setSize(ew, eh, false);
+      if(composer){ composer.setPixelRatio(1); composer.setSize(ew, eh); }
+      camera.aspect=ew/eh; camera.updateProjectionMatrix();
+      if(bloomReady && bloomPass && bloomPass.strength>0.001) composer.render(); else renderer.render(scene,camera);
+
+      const cv=renderer.domElement;
+      if(cv.toBlob){ cv.toBlob(b=>{ if(b) trigger(URL.createObjectURL(b), true); else trigger(cv.toDataURL('image/png')); restore(); }, 'image/png'); }
+      else { trigger(cv.toDataURL('image/png')); restore(); }
+    }catch(err){
+      console.error('export failed, falling back to screen resolution', err);
+      restore();
+      // fallback: grab at current screen resolution
+      try{ const cv=renderer.domElement; trigger(cv.toDataURL('image/png')); }catch(e2){ alert('Could not export. Try pressing F to hide the UI and take a screenshot instead.'); }
+    }
   }
   const saveMenu=document.getElementById('save-menu');
   document.getElementById('save').onclick=(e)=>{ e.stopPropagation(); saveMenu.hidden=!saveMenu.hidden; };
@@ -990,6 +1062,18 @@
     btn.onclick=(e)=>{ e.stopPropagation(); saveMenu.hidden=true; exportPNG(+btn.dataset.mult); };
   });
   document.addEventListener('mousedown',e=>{ if(!saveMenu.hidden && !e.target.closest('.save-wrap')) saveMenu.hidden=true; });
+
+  // ---------- clean-screen mode (F / Esc) for lag-free full-resolution screenshots ----------
+  let uiHidden=false, shotHintT=null;
+  function setCleanScreen(on){
+    uiHidden=on;
+    document.body.classList.toggle('ui-hidden', on);
+    if(typeof closePops==='function' && on) closePops();
+    const hint=document.getElementById('shot-hint');
+    if(on){ hint.classList.add('show'); clearTimeout(shotHintT); shotHintT=setTimeout(()=>hint.classList.remove('show'),2600); }
+    else { hint.classList.remove('show'); }
+  }
+  document.getElementById('cleanscreen').onclick=(e)=>{ e.stopPropagation(); setCleanScreen(true); };
   document.getElementById('undo').onclick=undo;
   document.getElementById('redo').onclick=redo;
 
@@ -1264,7 +1348,13 @@
     if(openPop==='pop-sculpt' && e.target.closest('#app')) return;
     closePops();
   });
-  window.addEventListener('keydown',e=>{ if(e.key==='Escape') closePops(); });
+  window.addEventListener('keydown',e=>{
+    const typing = e.target && (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA');
+    if(e.key==='Escape'){ if(uiHidden) setCleanScreen(false); else closePops(); }
+    else if((e.key==='f'||e.key==='F') && !typing && !e.metaKey && !e.ctrlKey && !e.altKey){
+      e.preventDefault(); setCleanScreen(!uiHidden);
+    }
+  });
   window.addEventListener('resize',()=>{ if(openPop){ const m=popMap.find(x=>x.pop===openPop); positionPop(document.getElementById(m.btn), document.getElementById(m.pop)); } });
 
   // ---------- multi-touch hover tooltip (NN/g: ~500ms show, ~400ms hide grace) ----------
